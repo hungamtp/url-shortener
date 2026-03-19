@@ -1,5 +1,8 @@
 # --- IAM Roles ---
+# IAM (Identity and Access Management) roles define "who" can do "what".
 
+# The Execution Role is used by the ECS infrastructure itself.
+# It allows Fargate to pull the Docker image from ECR and send logs to CloudWatch.
 resource "aws_iam_role" "ecs_task_execution_role" {
   name = "${var.app_name}-${var.environment}-ecs-execution-role"
 
@@ -20,6 +23,8 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# The Task Role is the identity of the RUNNING application code.
+# This gives your Java code permission to talk to DynamoDB and SQS.
 resource "aws_iam_role" "ecs_task_role" {
   name = "${var.app_name}-${var.environment}-ecs-task-role"
 
@@ -35,6 +40,8 @@ resource "aws_iam_role" "ecs_task_role" {
   })
 }
 
+# This policy defines the specific actions (GetItem, SendMessage, etc.) 
+# the Task Role is allowed to perform on our specific resources.
 resource "aws_iam_role_policy" "ecs_task_role_policy" {
   name = "${var.app_name}-${var.environment}-task-policy"
   role = aws_iam_role.ecs_task_role.id
@@ -69,24 +76,25 @@ resource "aws_iam_role_policy" "ecs_task_role_policy" {
 }
 
 # --- ECS Cluster ---
-
+# A logical grouping of tasks or services.
 resource "aws_ecs_cluster" "main" {
   name = "${var.app_name}-${var.environment}-cluster"
 }
 
+# CloudWatch Log Group for storing the application logs.
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/${var.app_name}-${var.environment}"
   retention_in_days = 7
 }
 
 # --- Task Definition ---
-
+# The blueprint for your container. It defines the Docker image, CPU/Memory, and Env vars.
 resource "aws_ecs_task_definition" "app" {
   family                   = "${var.app_name}-${var.environment}-task"
-  network_mode             = "awsvpc"
+  network_mode             = "awsvpc" # Required for Fargate
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 256
-  memory                   = 512
+  cpu                      = 256 # 0.25 vCPU
+  memory                   = 512 # 0.5 GB
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
@@ -121,12 +129,12 @@ resource "aws_ecs_task_definition" "app" {
 }
 
 # --- ECS Service ---
-
+# Maintains a specified number of instances of the task definition.
 resource "aws_ecs_service" "app" {
   name            = "${var.app_name}-${var.environment}-service"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = 2
+  desired_count   = 2 # Initial number of containers
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -144,6 +152,7 @@ resource "aws_ecs_service" "app" {
 
 # --- Auto Scaling ---
 
+# Defines the target (our ECS Service) that scales.
 resource "aws_appautoscaling_target" "ecs_target" {
   max_capacity       = 10
   min_capacity       = 2
@@ -152,6 +161,7 @@ resource "aws_appautoscaling_target" "ecs_target" {
   service_namespace  = "ecs"
 }
 
+# Defines the policy: scale based on CPU usage.
 resource "aws_appautoscaling_policy" "ecs_policy_cpu" {
   name               = "${var.app_name}-${var.environment}-cpu-auto-scaling"
   policy_type        = "TargetTrackingScaling"
@@ -163,7 +173,7 @@ resource "aws_appautoscaling_policy" "ecs_policy_cpu" {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
-    target_value       = 70.0
+    target_value       = 70.0 # Maintain average CPU at 70%
     scale_in_cooldown  = 300
     scale_out_cooldown = 60
   }

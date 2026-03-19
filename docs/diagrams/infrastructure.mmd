@@ -1,0 +1,51 @@
+graph TB
+    subgraph "External"
+        User((User/Browser))
+    end
+
+    subgraph "AWS Cloud"
+        IGW[Internet Gateway]
+        
+        subgraph "VPC (10.0.0.0/16)"
+            ALB[Application Load Balancer]
+            
+            subgraph "Public Subnet 1 (AZ-A)"
+                ECS1[ECS Task 1]
+            end
+            
+            subgraph "Public Subnet 2 (AZ-B)"
+                ECS2[ECS Task 2]
+            end
+            
+            subgraph "Security Groups"
+                ALB_SG[ALB SG - Port 80]
+                ECS_SG[ECS SG - Port 8080]
+            end
+        end
+
+        subgraph "Managed Services"
+            DDB[(DynamoDB: url_mappings)]
+            SQS[[SQS: url-analytics]]
+            DLQ[[SQS: url-analytics-dlq]]
+            S3[S3: url-shortener-logs]
+            Redis[(Redis Cache)]
+        end
+    end
+
+    %% Traffic Flow
+    User -->|HTTP| IGW
+    IGW --> ALB
+    ALB -->|Port 8080| ECS1
+    ALB -->|Port 8080| ECS2
+
+    %% App Interactions
+    ECS1 & ECS2 -->|Read/Write| Redis
+    ECS1 & ECS2 -->|Persist| DDB
+    ECS1 & ECS2 -->|Async Event| SQS
+    ECS1 & ECS2 -->|Storage| S3
+    SQS -.->|Failure| DLQ
+
+    %% Security Constraints
+    ALB_SG -.->|Restricts| ALB
+    ECS_SG -.->|Restricts| ECS1 & ECS2
+    ALB_SG -.->|Source for| ECS_SG
