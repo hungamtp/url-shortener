@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+  # ─── LocalStack (DynamoDB, SQS, S3) ────────────────────────────────────────
+  localstack:
+    image: localstack/localstack:3.3
+    container_name: url_shortener_localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,sqs,s3
+      - DEFAULT_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+      - EAGER_SERVICE_LOADING=1
+      - DEBUG=0
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ─── Redis (Cache layer) ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: url_shortener_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── Terraform Init (provision AWS resources on LocalStack) ─────────────────
+  terraform:
+    image: hashicorp/terraform:1.7
+    container_name: url_shortener_terraform
+    working_dir: /infra
+    volumes:
+      - ./infra:/infra
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        terraform init -input=false &&
+        terraform apply -auto-approve -input=false
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  # ─── Spring Boot Application ─────────────────────────────────────────────────
+  app:
+    build:
+      context: ./service
+      dockerfile: Dockerfile
+    container_name: url_shortener_app
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_REGION=us-east-1
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PORT=6379
+      - APP_BASE_URL=http://localhost:8080
+    depends_on:
+      redis:
+        condition: service_healthy
+      terraform:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  localstack_data:
+  redis_data:

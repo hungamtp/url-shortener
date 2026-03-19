@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant Controller as UrlController
+    participant Service as UrlShortenerService
+    participant Cache as RedisTemplate
+    participant Repo as UrlRepository
+    participant Analytics as AnalyticsService
+
+    Client->>Controller: GET /{code} (Redirect)
+    Controller->>Service: resolve(code, userAgent, ip, referer)
+    
+    Service->>Cache: opsForValue().get(cacheKey)
+    alt Cache Miss
+        Cache-->>Service: null
+        Service->>Repo: findByCode(code)
+        alt Not Found
+            Repo-->>Service: Optional.empty()
+            Service-->>Controller: throws UrlNotFoundException
+            Controller-->>Client: 404 Not Found
+        else Found
+            Repo-->>Service: Optional[UrlMapping]
+            Service->>Cache: opsForValue().set(cacheKey, mapping, ttl)
+        end
+    else Cache Hit
+        Cache-->>Service: UrlMapping
+    end
+    
+    par Async Event Publishing
+        Service-)Analytics: publishClickEvent(ClickEvent)
+    and Async Increment
+        Service-)Repo: incrementClickCount(code)
+    end
+    
+    Service-->>Controller: originalUrl
+    Controller-->>Client: 302 Found (Location: originalUrl)

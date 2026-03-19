@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: url-shortener
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      connect-timeout: 2s
+      timeout: 2s
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+  api-docs:
+    path: /v3/api-docs
+
+# Application-specific configuration
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+  cache:
+    url-ttl-minutes: 60
+  dynamodb:
+    table-name: url_mappings
+    default-ttl-days: 30
+  sqs:
+    analytics-queue: url-analytics
+
+# AWS SDK v2 Configuration
+aws:
+  region: ${AWS_REGION:us-east-1}
+  endpoint-url: ${AWS_ENDPOINT_URL:http://localhost:4566}
+  credentials:
+    access-key: ${AWS_ACCESS_KEY_ID:test}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:test}
+
+# Spring Cloud AWS SQS
+spring.cloud.aws:
+  region:
+    static: ${AWS_REGION:us-east-1}
+  credentials:
+    access-key: ${AWS_ACCESS_KEY_ID:test}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:test}
+  sqs:
+    endpoint: ${AWS_ENDPOINT_URL:http://localhost:4566}
+
+logging:
+  level:
+    com.urlshortener: INFO
+    software.amazon.awssdk: WARN
+    io.awspring.cloud: WARN

@@ -1,0 +1,28 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant Controller as UrlController
+    participant Service as UrlShortenerService
+    participant Repo as UrlRepository
+    participant Encoder as Base62Encoder
+    participant Cache as RedisTemplate
+
+    Client->>Controller: POST /api/v1/urls (ShortenRequest)
+    Controller->>Service: shorten(request)
+    
+    alt Custom Code Provided
+        Service->>Repo: findByCode(customCode)
+        alt Code Exists
+            Repo-->>Service: Optional[UrlMapping]
+            Service-->>Controller: throws CodeAlreadyExistsException
+            Controller-->>Client: 409 Conflict
+        end
+    else No Custom Code
+        Service->>Encoder: encode(generatedId)
+        Encoder-->>Service: Base62 Code
+    end
+    
+    Service->>Repo: save(UrlMapping)
+    Service->>Cache: opsForValue().set(cacheKey, mapping, ttl)
+    Service-->>Controller: ShortenResponse
+    Controller-->>Client: 201 Created (ShortenResponse)

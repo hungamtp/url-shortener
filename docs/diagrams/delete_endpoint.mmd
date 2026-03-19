@@ -1,0 +1,23 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant Controller as UrlController
+    participant Service as UrlShortenerService
+    participant Repo as UrlRepository
+    participant Cache as RedisTemplate
+
+    Client->>Controller: DELETE /api/v1/urls/{code}
+    Controller->>Service: delete(code)
+    
+    Service->>Repo: findByCode(code)
+    alt Not Found
+        Repo-->>Service: Optional.empty()
+        Service-->>Controller: throws UrlNotFoundException
+        Controller-->>Client: 404 Not Found
+    else Found
+        Repo-->>Service: Optional[UrlMapping]
+        Service->>Repo: delete(code)
+        Service->>Cache: delete(cacheKey)
+        Service-->>Controller: void
+        Controller-->>Client: 204 No Content
+    end
