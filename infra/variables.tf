@@ -45,3 +45,9 @@ variable "url_ttl_days" {
   type        = number
   default     = 30
 }
+
+variable "redis_host" {
+  description = "Redis host endpoint for application caching layer"
+  type        = string
+  default     = "172.17.0.1" # Matches external docker bridge connection typically used for LocalStack
+}

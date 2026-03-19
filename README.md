@@ -20,10 +20,13 @@ Spring Boot 3 App (:8080)
           ├── Redis     (cache-aside, 60 min TTL)
           └── SQS       (async click event analytics)
 
-Infrastructure (LocalStack @ localhost:4566):
-  ├── DynamoDB → url_mappings table
-  ├── SQS      → url-analytics queue + DLQ
-  └── S3       → url-shortener-logs bucket
+Infrastructure (LocalStack @ localhost:4566 & Production Ready):
+  ├── VPC          → Custom VPC with Public Subnets & IGW
+  ├── ALB          → Application Load Balancer with HTTP Listener
+  ├── ECS (Fargate)→ Service with Auto Scaling (2-10 instances)
+  ├── DynamoDB     → url_mappings table
+  ├── SQS          → url-analytics queue + DLQ
+  └── S3           → url-shortener-logs bucket
 ```
 
 ---
@@ -162,10 +165,13 @@ url-shortener/
 │   ├── main.tf                      # Module wiring
 │   ├── variables.tf / outputs.tf
 │   ├── terraform.tfvars
-│   └── modules/
-│       ├── dynamodb/                # url_mappings table
-│       ├── sqs/                     # url-analytics + DLQ
-│       └── s3/                      # url-shortener-logs bucket
+│   ├── modules/
+│   │   ├── vpc/                     # Networking (VPC, Subnets, SG)
+│   │   ├── alb/                     # Load Balancing (ALB, TG, Listener)
+│   │   ├── ecs/                     # Compute (Fargate, Tasks, IAM, Scaling)
+│   │   ├── dynamodb/                # url_mappings table
+│   │   ├── sqs/                     # url-analytics + DLQ
+│   │   └── s3/                      # url-shortener-logs bucket
 └── service/                         # Spring Boot 3 App
     ├── Dockerfile
     ├── pom.xml
